@@ -1,9 +1,9 @@
-
+from celery import Celery
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-
+from tasks import send_contract_email
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -64,6 +64,16 @@ def login():
             return redirect(url_for('profile'))
         flash('Invalid username or password', 'danger')
     return render_template('login.html')
+
+
+@app.route ( '/create_contract' , methods=['POST'] )
+@login_required
+def create_contract():
+    contract_info = request.form['contract_info']
+
+    send_contract_email.delay ( current_user.username , contract_info )
+    flash ( 'Contract created! Confirmation email sent.' , 'success' )
+    return redirect ( url_for ( 'profile' ) )
 
 @app.route('/logout')
 @login_required
