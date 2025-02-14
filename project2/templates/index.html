@@ -1,22 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home</title>
-</head>
-<body>
-    <h1>Welcome to the Marketplace</h1>
-    <nav>
-        <a href="{{ url_for('login') }}">Login</a> |
-        <a href="{{ url_for('register') }}">Register</a> |
-        <a href="{{ url_for('profile') }}">Profile</a>
-    </nav>
-    <h2>Available Items</h2>
-    <ul>
-        {% for item in items %}
-            <li>{{ item.name }}</li>
-        {% endfor %}
-    </ul>
-</body>
-</html>
+<!-- templates/index.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Welcome to the Home Page</h1>
+<ul>
+    {% for item in items %}
+        <li>{{ item.name }} - Status: {{ item.status }}
+            {% if current_user.is_authenticated %}
+                <form action="{{ url_for('create_contract', item_id=item.id) }}" method="POST" style="display:inline;">
+                    <button type="submit">Create Contract</button>
+                </form>
+            {% endif %}
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}
+

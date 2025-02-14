@@ -2,7 +2,6 @@ from flask import Flask
 from flask_mail import Mail, Message
 from celery_setup import make_celery
 
-# Ініціалізуємо Flask
 app = Flask(__name__)
 app.config.from_object('config')
 

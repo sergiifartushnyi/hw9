@@ -4,12 +4,28 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from tasks import send_contract_email
+from hw9.project2.forms import RegistrationForm
+
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///new_database.db'
 app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['CELERY_BROKER_URL'] = 'redis://localhost:6379/0'
+app.config['CELERY_RESULT_BACKEND'] = 'redis://localhost:6379/0'
+
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        broker=app.config['CELERY_BROKER_URL'],
+        backend=app.config['CELERY_RESULT_BACKEND']
+    )
+    celery.conf.update(app.config)
+    return celery
+
+celery = make_celery(app)
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -26,10 +42,20 @@ class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(50), default='Available')
+
+class Contract(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    status = db.Column(db.String(50), default='Pending')
+
+    user = db.relationship('User', backref=db.backref('contracts', lazy=True))
+    item = db.relationship('Item', backref=db.backref('contracts', lazy=True))
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, user_id)
 
 @app.route('/')
 def index():
@@ -38,9 +64,10 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
         if User.query.filter_by(username=username).first():
             flash('Username already exists', 'danger')
             return redirect(url_for('register'))
@@ -50,7 +77,7 @@ def register():
         db.session.commit()
         flash('Registration successful!', 'success')
         return redirect(url_for('login'))
-    return render_template('register.html')
+    return render_template('register.html', form=form)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -64,16 +91,6 @@ def login():
             return redirect(url_for('profile'))
         flash('Invalid username or password', 'danger')
     return render_template('login.html')
-
-
-@app.route ( '/create_contract' , methods=['POST'] )
-@login_required
-def create_contract():
-    contract_info = request.form['contract_info']
-
-    send_contract_email.delay ( current_user.username , contract_info )
-    flash ( 'Contract created! Confirmation email sent.' , 'success' )
-    return redirect ( url_for ( 'profile' ) )
 
 @app.route('/logout')
 @login_required
@@ -91,7 +108,10 @@ def profile():
 @app.route('/add_item', methods=['POST'])
 @login_required
 def add_item():
-    name = request.form['name']
+    name = request.form['name'].strip()
+    if not name:
+        flash('Item name cannot be empty!', 'danger')
+        return redirect(url_for('profile'))
     new_item = Item(name=name, owner_id=current_user.id)
     db.session.add(new_item)
     db.session.commit()
@@ -109,6 +129,23 @@ def delete_item(item_id):
     db.session.commit()
     flash('Item deleted!', 'info')
     return redirect(url_for('profile'))
+
+@app.route('/create_contract/<int:item_id>', methods=['POST'])
+@login_required
+def create_contract(item_id):
+    item = Item.query.get(item_id)
+    if item:
+        send_contract_email.delay(current_user.username, f'Contract for {item.name}', 'Your contract body text here')
+        flash('Contract created and email sent!', 'success')
+    else:
+        flash('Item not found!', 'danger')
+    return redirect(url_for('contracts'))
+
+@app.route('/contracts')
+@login_required
+def contracts():
+    user_contracts = Contract.query.filter_by(user_id=current_user.id).all()
+    return render_template('contracts.html', contracts=user_contracts)
 
 if __name__ == '__main__':
     with app.app_context():
