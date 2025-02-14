@@ -1,0 +1,34 @@
+<!-- contracts.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contracts</title>
+</head>
+<body>
+    <h1>Your Contracts</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Contract ID</th>
+                <th>Item Name</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for contract in contracts %}
+            <tr>
+                <td>{{ contract.id }}</td>
+                <td>{{ contract.item.name }}</td>
+                <td>{{ contract.status }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3">No contracts found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
